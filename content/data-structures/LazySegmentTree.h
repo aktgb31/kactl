@@ -1,66 +1,108 @@
 /**
- * Author: Simon Lindholm
- * Date: 2016-10-08
+ * Author: Amit Kumar
+ * Date: 2022-09-30
  * License: CC0
  * Source: me
- * Description: Segment tree with ability to add or set values of large intervals, and compute max of intervals.
- * Can be changed to other things.
- * Use with a bump allocator for better performance, and SmallPtr or implicit indices to save memory.
+ * Description: 
  * Time: O(\log N).
- * Usage: Node* tr = new Node(v, 0, sz(v));
- * Status: stress-tested a bit
  */
-#pragma once
+class Node
+{public:
+long long value;
+Node() { value = 0; }; // Identity
+explicit Node(long long v) { value = v; }
+static Node mergeSegNodes(const Node &a, const Node &b)
+{Node res;
+res.value = (a.value + b.value);
+return res;}
+void mergeLazyNodes(const Node &b)
+{this->value += b.value;}
+void mergeSegLazy(const Node &b, const int &l, const int &r)
+{this->value += (r - l + 1) * b.value;}};
 
-#include "../various/BumpAllocator.h"
+template <typename segNode>
+class segTree
+{int size;
+vector<segNode> Seg;
+vector<segNode> Lazy;
+vector<bool> isLazy;
 
-const int inf = 1e9;
-struct Node {
-	Node *l = 0, *r = 0;
-	int lo, hi, mset = inf, madd = 0, val = -inf;
-	Node(int lo,int hi):lo(lo),hi(hi){} // Large interval of -inf
-	Node(vi& v, int lo, int hi) : lo(lo), hi(hi) {
-		if (lo + 1 < hi) {
-			int mid = lo + (hi - lo)/2;
-			l = new Node(v, lo, mid); r = new Node(v, mid, hi);
-			val = max(l->val, r->val);
-		}
-		else val = v[lo];
-	}
-	int query(int L, int R) {
-		if (R <= lo || hi <= L) return -inf;
-		if (L <= lo && hi <= R) return val;
-		push();
-		return max(l->query(L, R), r->query(L, R));
-	}
-	void set(int L, int R, int x) {
-		if (R <= lo || hi <= L) return;
-		if (L <= lo && hi <= R) mset = val = x, madd = 0;
-		else {
-			push(), l->set(L, R, x), r->set(L, R, x);
-			val = max(l->val, r->val);
-		}
-	}
-	void add(int L, int R, int x) {
-		if (R <= lo || hi <= L) return;
-		if (L <= lo && hi <= R) {
-			if (mset != inf) mset += x;
-			else madd += x;
-			val += x;
-		}
-		else {
-			push(), l->add(L, R, x), r->add(L, R, x);
-			val = max(l->val, r->val);
-		}
-	}
-	void push() {
-		if (!l) {
-			int mid = lo + (hi - lo)/2;
-			l = new Node(lo, mid); r = new Node(mid, hi);
-		}
-		if (mset != inf)
-			l->set(lo,hi,mset), r->set(lo,hi,mset), mset = inf;
-		else if (madd)
-			l->add(lo,hi,madd), r->add(lo,hi,madd), madd = 0;
-	}
+void propagate(int node, int l, int r)
+{if (isLazy[node])
+{isLazy[node] = false;
+Seg[node].mergeSegLazy(Lazy[node], l, r);
+if (l != r)
+{int mid = (l + r) >> 1;
+Lazy[node + 1].mergeLazyNodes(Lazy[node]);
+Lazy[node + 2 * (mid - l + 1)].mergeLazyNodes(Lazy[node]);
+isLazy[node + 1] = true;
+isLazy[node + 2 * (mid - l + 1)] = true;}
+Lazy[node] = segNode();}}
+
+void build(int node, int start, int end, const vector<segNode> &Base) // Recursively Builds the tree
+{if (start == end)
+{Seg[node] = Base[start];return;}
+int mid = (start + end) >> 1;
+build(node + 1, start, mid, Base);
+build(node + 2 * (mid - start + 1), mid + 1, end, Base);
+Seg[node] = segNode::mergeSegNodes(Seg[node + 1], Seg[node + 2 * (mid - start + 1)]);
+}
+
+segNode rQuery(int node, int start, int end, int qstart, int qend) // Range Query
+{propagate(node, start, end);
+if (qend < start || qstart > end || start > end)
+return segNode();
+if (qstart <= start && end <= qend)
+return Seg[node];
+int mid = (start + end) >> 1;
+segNode l, r;
+propagate(node + 1, start, mid);
+propagate(node + 2 * (mid - start + 1), mid + 1, end);
+if (qstart <= mid)
+l = rQuery(node + 1, start, mid, qstart, qend);
+if (qend >= mid + 1)
+r = rQuery(node + 2 * (mid - start + 1), mid + 1, end, qstart, qend);
+return segNode::mergeSegNodes(l, r);}
+
+void rUpdate(int node, int start, int end, int qstart, int qend, segNode val)
+{propagate(node, start, end);
+if (qend < start || qstart > end || start > end)
+return;
+if (qstart <= start && end <= qend)
+{isLazy[node] = true;
+Lazy[node] = val;
+propagate(node, start, end);
+return;
+}
+int mid = (start + end) >> 1;
+propagate(node + 1, start, mid);
+propagate(node + 2 * (mid - start + 1), mid + 1, end);
+if (qstart <= mid)
+rUpdate(node + 1, start, mid, qstart, qend, val);
+if (qend >= mid + 1)
+rUpdate(node + 2 * (mid - start + 1), mid + 1, end, qstart, qend, val);
+Seg[node] = segNode::mergeSegNodes(Seg[node + 1], Seg[node + 2 * (mid - start + 1)]);
+}
+
+public:
+segTree() : segTree(0){};
+explicit segTree(int n) : size(n), Seg(n << 1), Lazy(n << 1), isLazy(n << 1){};
+explicit segTree(const vector<segNode> &Base) : size(Base.size())
+{Seg = vector<segNode>(size << 1);
+Lazy = vector<segNode>(size << 1);
+isLazy = vector<bool>(size << 1);
+build(1, 0, size - 1, Base);}
+
+segNode get(int pos)
+{assert(pos >= 0 && pos < size);
+return rQuery(1, 0, size - 1, pos, pos);}
+segNode get(int left, int right)
+{assert(left <= right && left >= 0 && right < size);
+return rQuery(1, 0, size - 1, left, right);}
+void update(int pos, segNode val)
+{assert(pos >= 0 && pos < size);
+rUpdate(1, 0, size - 1, pos, pos, val);}
+void update(int left, int right, segNode val)
+{assert(left <= right && left >= 0 && right < size);
+rUpdate(1, 0, size - 1, left, right, val);}
 };

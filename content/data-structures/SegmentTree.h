@@ -1,30 +1,82 @@
 /**
- * Author: Lucian Bicsi
- * Date: 2017-10-31
+ * Author: Amit Kumar
+ * Date: 2022-09-30
  * License: CC0
- * Source: folklore
- * Description: Zero-indexed max-tree. Bounds are inclusive to the left and exclusive to the right. Can be changed by modifying T, f and unit.
+ * Source: Self
+ * Description: Zero indexed segment tree
  * Time: O(\log N)
- * Status: stress-tested
  */
-#pragma once
+class Node
+{public:
+int value;
+Node() { value = INT_MAX; }; // Identity
+explicit Node(int v) { value = v; }
+static Node mergeSegNodes(const Node &a, const Node &b)
+{Node res;
+res.value = min(a.value, b.value);
+return res;}
+};
 
-struct Tree {
-	typedef int T;
-	static constexpr T unit = INT_MIN;
-	T f(T a, T b) { return max(a, b); } // (any associative fn)
-	vector<T> s; int n;
-	Tree(int n = 0, T def = unit) : s(2*n, def), n(n) {}
-	void update(int pos, T val) {
-		for (s[pos += n] = val; pos /= 2;)
-			s[pos] = f(s[pos * 2], s[pos * 2 + 1]);
-	}
-	T query(int b, int e) { // query [b, e)
-		T ra = unit, rb = unit;
-		for (b += n, e += n; b < e; b /= 2, e /= 2) {
-			if (b % 2) ra = f(ra, s[b++]);
-			if (e % 2) rb = f(s[--e], rb);
-		}
-		return f(ra, rb);
-	}
+template <typename segNode>
+class segTree
+{int size;
+vector<segNode> Seg;
+void build(int node, int start, int end, const vector<segNode> &Base) // Recursively Builds the tree
+{if (start == end)
+{Seg[node] = Base[start];
+return;}
+int mid = (start + end) >> 1;
+build(node + 1, start, mid, Base);
+build(node + 2 * (mid - start + 1), mid + 1, end, Base);
+Seg[node] = segNode::mergeSegNodes(Seg[node + 1], Seg[node + 2 * (mid - start + 1)]);
+}
+
+segNode rQuery(int node, int start, int end, int qstart, int qend) const // Range Query
+{if (qend < start || qstart > end || start > end)
+return segNode();
+if (qstart <= start && end <= qend)
+return Seg[node];
+int mid = (start + end) >> 1;
+segNode l, r;
+if (qstart <= mid)
+l = rQuery(node + 1, start, mid, qstart, qend);
+if (qend >= mid + 1)
+r = rQuery(node + 2 * (mid - start + 1), mid + 1, end, qstart, qend);
+return segNode::mergeSegNodes(l, r);
+}
+
+void pUpdate(int node, int start, int end, int pos, segNode val, int type)
+{if (start == end)
+{Seg[node] = type ? segNode::mergeSegNodes(Seg[node], val) : val;
+return;}
+int mid = (start + end) >> 1;
+if (pos <= mid)
+pUpdate(node + 1, start, mid, pos, val, type);
+else
+pUpdate(node + 2 * (mid - start + 1), mid + 1, end, pos, val, type);
+Seg[node] = segNode::mergeSegNodes(Seg[node + 1], Seg[node + 2 * (mid - start + 1)]);
+}
+
+public:
+segTree() : segTree(0){};
+explicit segTree(int n) : size(n), Seg(n << 1){};
+explicit segTree(const vector<segNode> &Base) : size(Base.size())
+{Seg = vector<segNode>(size << 1);
+build(1, 0, size - 1, Base);}
+
+segNode get(int pos) const
+{assert(pos >= 0 && pos < size);
+return rQuery(1, 0, size - 1, pos, pos);}
+
+segNode get(int left, int right) const
+{assert(left <= right && left >= 0 && right < size);
+return rQuery(1, 0, size - 1, left, right);}
+
+void update(int pos, segNode val) // Updates according to merge
+{assert(pos >= 0 && pos < size);
+pUpdate(1, 0, size - 1, pos, val, 1);}
+
+void set(int pos, segNode val) // Force sets value of node
+{assert(pos >= 0 && pos < size);
+pUpdate(1, 0, size - 1, pos, val, 0);}
 };
